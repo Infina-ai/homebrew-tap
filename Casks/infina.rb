@@ -13,6 +13,7 @@ cask "infina" do
   end
 
   auto_updates true
+  depends_on arch: :arm64
   depends_on macos: :ventura
 
   app "Infina.app"

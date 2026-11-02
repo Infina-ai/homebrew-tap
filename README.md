@@ -6,7 +6,7 @@ Install [Infina](https://www.infina.so/), voice typing for Mac, with Homebrew:
 brew install --cask infina-ai/tap/infina
 ```
 
-Infina updates itself after install, so you don't need `brew upgrade` to stay current.
+Needs a Mac with Apple Silicon (M1 or later) and macOS 13 or newer. Infina updates itself after install, so you don't need `brew upgrade` to stay current.
 
 To remove it:
 
@@ -15,9 +15,3 @@ brew uninstall --cask infina
 ```
 
 Add `--zap` to also remove its settings and caches.
-
-Not using Homebrew? Run this in Terminal instead:
-
-```sh
-curl -fsSL https://www.infina.so/install.sh | bash
-```
