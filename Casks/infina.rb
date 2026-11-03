@@ -1,6 +1,6 @@
 cask "infina" do
-  version "1.45.5"
-  sha256 "6d62331d0c7a5c7e90ad614a18fe1a7a653f634674724c6569e24737358a31c7"
+  version "1.45.8"
+  sha256 "08937f1fb18fdf3997422da1e38bb614de99ee0447bc33e94e2a8e0687ab0630"
 
   url "https://downloads.infina.so/v#{version}/mac/infina-desktop-#{version}-macos-universal.dmg"
   name "Infina"
