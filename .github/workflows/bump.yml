@@ -1,0 +1,76 @@
+# Keeps Casks/infina.rb on the latest Infina, so `brew install` always gets
+# the newest release. Every hour it reads the same link the download page
+# uses; when there is a new version it downloads it, checks it is the real
+# Infina (signed by Infina's Team ID and approved by Apple), and only then
+# writes the new version and sha256.
+name: Bump Infina
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bump-infina
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bump to the latest release
+        run: |
+          set -euo pipefail
+          TEAM_ID="987528T5LR"
+          BUNDLE_ID="com.infinalabs.infina"
+
+          url="$(curl --proto '=https' --tlsv1.2 -fsSL https://www.infina.so/api/releases |
+            python3 -c 'import json,sys; print(json.load(sys.stdin).get("mac_url") or "")')"
+          # Only our own release host. A link still on the Google bucket means
+          # the new version isn't on downloads.infina.so yet: wait for it.
+          re='^https://downloads\.infina\.so/v([0-9]+\.[0-9]+\.[0-9]+)/mac/infina-desktop-([0-9]+\.[0-9]+\.[0-9]+)-macos-universal\.dmg$'
+          if [[ ! "$url" =~ $re ]] || [ "${BASH_REMATCH[1]}" != "${BASH_REMATCH[2]}" ]; then
+            echo "Latest link isn't on downloads.infina.so yet ($url). Nothing to do."
+            exit 0
+          fi
+          new="${BASH_REMATCH[1]}"
+          cur="$(sed -n 's/^  version "\(.*\)"$/\1/p' Casks/infina.rb)"
+          if [ "$new" = "$cur" ]; then
+            echo "Cask is on the latest version ($cur)."
+            exit 0
+          fi
+          echo "New version: $cur -> $new"
+
+          dmg="$RUNNER_TEMP/infina.dmg"
+          # Same bytes on both hosts; the Google bucket is the fallback if
+          # Cloudflare challenges the runner.
+          curl --proto '=https' --tlsv1.2 -fsSL -o "$dmg" "$url" ||
+            curl --proto '=https' --tlsv1.2 -fsSL -o "$dmg" \
+              "https://storage.googleapis.com/infina-ai-app-releases_new/v$new/mac/infina-desktop-$new-macos-universal.dmg"
+
+          mnt="$RUNNER_TEMP/mnt"
+          mkdir -p "$mnt"
+          hdiutil attach -quiet -nobrowse -readonly -noautoopen -mountpoint "$mnt" "$dmg"
+          app="$mnt/Infina.app"
+          [ "$(plutil -extract CFBundleIdentifier raw -o - "$app/Contents/Info.plist")" = "$BUNDLE_ID" ]
+          [ "$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")" = "$new" ]
+          codesign --verify --strict "$app"
+          codesign -dv "$app" 2>&1 | grep -x "TeamIdentifier=$TEAM_ID" >/dev/null
+          spctl --assess --type execute "$app"
+          hdiutil detach -quiet "$mnt"
+
+          sha="$(shasum -a 256 "$dmg" | cut -d' ' -f1)"
+          sed -i '' -e "s/^  version \".*\"$/  version \"$new\"/" \
+            -e "s/^  sha256 \".*\"$/  sha256 \"$sha\"/" Casks/infina.rb
+          git diff
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "infina $new"
+          git push
